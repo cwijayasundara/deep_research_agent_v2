@@ -3,8 +3,8 @@ use rig::completion::Prompt;
 use std::sync::Arc;
 use tavily::Tavily;
 
-use super::prompts::{build_orchestrator_preamble, build_orchestrator_query};
-use super::researcher_tool::ResearcherTool;
+use super::prompts::{build_search_queries, build_synthesis_preamble, build_synthesis_prompt};
+use super::tavily_tool;
 
 pub async fn run_research(
     client: &rig::providers::openai::Client,
@@ -13,69 +13,97 @@ pub async fn run_research(
     tavily_api_key: &str,
     date: &str,
 ) -> Result<String, String> {
-    let researcher_tool = ResearcherTool::new(
-        Arc::new(client.clone()),
-        model.to_string(),
-        tavily,
-        tavily_api_key.to_string(),
-        date.to_string(),
+    // --- Phase 1: Parallel Search (no LLM) ---
+    let search_queries = build_search_queries(date);
+    let total_queries = search_queries.len();
+
+    tracing::info!(
+        date = %date,
+        query_count = total_queries,
+        "Phase 1: Starting parallel Tavily searches"
     );
 
-    let preamble = build_orchestrator_preamble(date);
-    let agent = client
-        .agent(model)
-        .preamble(&preamble)
-        .tool(researcher_tool)
-        .max_tokens(16384)
-        .build();
+    let phase1_start = std::time::Instant::now();
 
-    let query = build_orchestrator_query(date);
+    let search_futures = search_queries.into_iter().map(|(layer, query)| {
+        let tavily = tavily.clone();
+        let api_key = tavily_api_key.to_string();
+        async move {
+            match tavily_tool::search(&tavily, &api_key, &query).await {
+                Ok(results) => (layer, results),
+                Err(e) => {
+                    tracing::warn!(
+                        layer = %layer,
+                        query = %query,
+                        error = %e,
+                        "Search failed, continuing with partial data"
+                    );
+                    (layer, format!("[Search failed for '{}': {}]", query, e))
+                }
+            }
+        }
+    });
+
+    let search_results: Vec<(String, String)> =
+        futures::future::join_all(search_futures).await;
+
+    let successful = search_results
+        .iter()
+        .filter(|(_, r)| !r.starts_with("[Search failed"))
+        .count();
+
+    tracing::info!(
+        date = %date,
+        total = total_queries,
+        successful = successful,
+        failed = total_queries - successful,
+        duration_s = phase1_start.elapsed().as_secs_f64(),
+        "Phase 1: Parallel searches completed"
+    );
+
+    // --- Phase 2: Single LLM Synthesis ---
     tracing::info!(
         date = %date,
         model = %model,
-        max_turns = 10,
-        "Invoking orchestrator agent"
+        "Phase 2: Starting LLM synthesis"
     );
 
-    let start = std::time::Instant::now();
-    let result: String = match agent.prompt(&query).max_turns(10).await {
-        Ok(output) => output,
-        Err(e) => {
-            let err_str = e.to_string();
-            if err_str.contains("usage policy")
-                || err_str.contains("content_filter")
-                || err_str.contains("flagged")
-            {
-                tracing::warn!(
-                    date = %date,
-                    duration_s = start.elapsed().as_secs_f64(),
-                    error = %err_str,
-                    "Orchestrator hit content filter, returning partial result"
-                );
-                format!(
-                    "## TL;DR\n- Report generation was partially blocked by the model's \
-                     content safety filter. Some research topics were skipped.\n\n\
-                     ## Completeness Audit\n- **Verified Signals**: 0\n\
-                     - **Sources Checked**: 0\n- **Confidence Score**: 0.0\n\
-                     - **Gaps**: Content filter prevented complete research"
-                )
-            } else {
-                tracing::error!(
-                    date = %date,
-                    duration_s = start.elapsed().as_secs_f64(),
-                    error = %err_str,
-                    "Orchestrator agent FAILED"
-                );
-                return Err(err_str);
-            }
-        }
-    };
+    let phase2_start = std::time::Instant::now();
+
+    let preamble = build_synthesis_preamble();
+    let synthesis_prompt = build_synthesis_prompt(date, &search_results);
+
+    let agent = client
+        .agent(model)
+        .preamble(&preamble)
+        .max_tokens(32768)
+        .build();
+
+    let result: String = agent
+        .prompt(&synthesis_prompt)
+        .max_turns(1)
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                date = %date,
+                duration_s = phase2_start.elapsed().as_secs_f64(),
+                error = %e,
+                "Phase 2: LLM synthesis FAILED"
+            );
+            e.to_string()
+        })?;
+
+    let total_duration =
+        phase1_start.elapsed().as_secs_f64();
 
     tracing::info!(
         date = %date,
-        duration_s = start.elapsed().as_secs_f64(),
+        phase1_duration_s = (phase2_start - phase1_start).as_secs_f64(),
+        phase2_duration_s = phase2_start.elapsed().as_secs_f64(),
+        total_duration_s = total_duration,
         output_len = result.len(),
-        "Orchestrator agent completed"
+        "Pipeline completed"
     );
+
     Ok(result)
 }

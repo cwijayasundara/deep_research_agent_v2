@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rig-core = { version = "0.31", features = ["derive"] }
+rig-core = "0.31"
 tavily = "2.1"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
@@ -21,6 +21,5 @@ regex = "1"
 thiserror = "2"
 dotenvy = "0.15"
 uuid = { version = "1", features = ["v4"] }
-schemars = "0.8"
 reqwest = { version = "0.12", features = ["json"] }
 futures = "0.3"

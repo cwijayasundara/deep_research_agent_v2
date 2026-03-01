@@ -1,6 +1,6 @@
 # Deep Research Agent v2 — Multi-Agent Architecture
 
-A daily AI intelligence tracker powered by true multi-agent research pipelines. Two backend options (Python/DeepAgents and Rust/Rig) serve the same Next.js frontend via an identical REST/JSON API.
+A daily AI intelligence tracker powered by multi-agent research pipelines. Two backend options (Python/DeepAgents and Rust/Rig) serve the same Next.js frontend via an identical REST/JSON API.
 
 ## Architecture
 
@@ -15,29 +15,77 @@ A daily AI intelligence tracker powered by true multi-agent research pipelines. 
     ┌────────────▼────────────┐  ┌───────────▼────────────┐
     │  Python/DeepAgents      │  │  Rust/Rig              │
     │  FastAPI + LangGraph    │  │  Axum + Rig 0.31       │
+    │  (Sub-Agent Pattern)    │  │  (Direct Pipeline)     │
     └────────────┬────────────┘  └───────────┬────────────┘
                  │                           │
-    ┌────────────▼────────────────────────────▼────────────┐
-    │              Multi-Agent Research Pipeline            │
-    │                                                      │
-    │  Orchestrator Agent                                  │
-    │    ├── Plans research strategy (think_tool)          │
-    │    ├── Delegates to sub-agents (1-3 parallel)        │
-    │    ├── Synthesizes findings                          │
-    │    └── Produces structured markdown report           │
-    │                                                      │
-    │  Researcher Sub-Agent(s)                             │
-    │    ├── Web search via Tavily                         │
-    │    ├── Reflects after each search (think_tool)       │
-    │    └── Returns cited findings                        │
-    └──────────────────────────────────────────────────────┘
+    ┌────────────▼──────────┐   ┌────────────▼──────────┐
+    │  Multi-Agent Pipeline │   │  Search → Synthesize  │
+    │                       │   │  Pipeline             │
+    │  Orchestrator Agent   │   │                       │
+    │   ├── think_tool      │   │  Phase 1: Parallel    │
+    │   ├── Researcher ×5   │   │    Tavily Search      │
+    │   └── Synthesize      │   │    (11 queries, no    │
+    │                       │   │     LLM, ~3 seconds)  │
+    │  Researcher Sub-Agent │   │                       │
+    │   ├── Tavily search   │   │  Phase 2: Single LLM  │
+    │   ├── think_tool      │   │    Synthesis Call     │
+    │   └── Cited findings  │   │    (~30-60 seconds)   │
+    └───────────────────────┘   └───────────────────────┘
 ```
+
+## Why the Rust Backend Uses a Direct Pipeline (Not Sub-Agents)
+
+The Python backend successfully uses the DeepAgents sub-agent pattern (orchestrator → researcher sub-agents → Tavily). We initially implemented the same pattern in Rust using rig-core 0.31's `Agent-as-Tool` wrapper. However, this approach hit fundamental problems:
+
+### Problems with Sub-Agents in rig-core
+
+1. **MaxTurnError data loss** — When a researcher sub-agent hit its turn limit, ALL intermediate search results were lost. The orchestrator received only an error message, not the partial data the researcher had already gathered. This made reports incomplete and unpredictable.
+
+2. **Double token cost** — Both the orchestrator LLM and each researcher LLM consumed tokens for reasoning. The researcher agents spent tokens deciding *what* to search, but our 5-layer detection engine already defines exactly what to search. This reasoning overhead was pure waste.
+
+3. **Non-deterministic search coverage** — The LLM decided when and what to search. Some runs would skip layers entirely or spend too many turns on one layer. But our 5-layer engine is fully predetermined — there's no decision to make.
+
+4. **Fragile turn budgets** — Each Tavily search + LLM response = 2 turns. With `max_turns=15` per researcher, only ~7 searches were possible before hitting the limit. Increasing the budget increased cost without fixing the underlying design mismatch.
+
+### The Key Insight
+
+Our 5-layer detection engine is **deterministic**. We know exactly what queries to run across all 5 layers before any LLM is involved. The LLM only adds value in the *synthesis* step — turning raw search results into a structured report. Sub-agents add complexity and cost without adding intelligence.
+
+### Rust Pipeline Design
+
+```
+Phase 1: Parallel Tavily Search (no LLM, ~3 seconds)
+    ├─ Layer 1: Vendor Sweep         (3 queries)
+    ├─ Layer 2: Market Sweep         (2 queries)
+    ├─ Layer 3: Moat-Attack Radar    (2 queries)
+    ├─ Layer 4: Sovereign/Geo        (2 queries)
+    └─ Layer 5: Narrative Velocity   (2 queries)
+    Total: 11 queries via futures::join_all
+                    ↓
+Phase 2: Single LLM Synthesis Call (~30-60s)
+    └─ System prompt + all search results → markdown report
+                    ↓
+Phase 3: Parse & Persist (unchanged)
+    └─ Regex parser → EngineResult → SQLite
+```
+
+### Results
+
+| Metric | Sub-Agent (old) | Direct Pipeline (new) |
+|--------|----------------|----------------------|
+| MaxTurnError risk | High | Zero (no agent loops) |
+| LLM calls | 6 (orchestrator + 5 researchers) | 1 (synthesis only) |
+| Search coverage | Non-deterministic | All 5 layers guaranteed |
+| Token cost | ~2x (reasoning overhead) | ~1x (synthesis only) |
+| Typical events parsed | Variable (data loss) | 15-20 events |
+
+The Python backend keeps the DeepAgents sub-agent pattern — it works well there because DeepAgents handles turn limits and partial results more gracefully.
 
 ## Key Differences from v1
 
 | Aspect | v1 | v2 |
 |--------|----|----|
-| Research | Fixed pipeline (parallel LLM calls) | Multi-agent with planning + delegation |
+| Research | Fixed pipeline (parallel LLM calls) | Multi-agent (Python) / Search→Synthesize pipeline (Rust) |
 | Engines | Two (Gemini + LangChain) | Single agent pipeline |
 | Report model | `gemini_result` + `langchain_result` | Single `result` field |
 | ViralEvent | Missing `summary` | Includes `summary` |
@@ -145,11 +193,10 @@ deep_research_agent_v2/
 │   │   ├── types/                     # Domain models
 │   │   ├── auth/                      # JWT auth + middleware
 │   │   ├── repo/                      # SQLite persistence
-│   │   ├── agents/                    # Multi-agent components
-│   │   │   ├── orchestrator.rs        # Orchestrator agent
-│   │   │   ├── researcher_tool.rs     # Agent-as-Tool wrapper
-│   │   │   ├── tavily_tool.rs         # Tavily Rig Tool
-│   │   │   └── prompts.rs            # Agent prompts
+│   │   ├── agents/                    # Search → Synthesize pipeline
+│   │   │   ├── orchestrator.rs        # Two-phase pipeline (search + synthesize)
+│   │   │   ├── tavily_tool.rs         # Direct Tavily search function
+│   │   │   └── prompts.rs            # Synthesis prompt + search queries
 │   │   ├── orchestration/             # Research runner
 │   │   ├── routes/                    # Axum HTTP handlers
 │   │   ├── parser.rs                  # Markdown parser
