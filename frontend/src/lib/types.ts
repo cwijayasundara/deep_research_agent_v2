@@ -1,20 +1,33 @@
 export type ResearchStatus = "pending" | "running" | "completed" | "failed";
 export type ConfidenceLevel = "high" | "medium" | "low";
+export type WhyIncludedTag = "A" | "B" | "C" | "D" | "E" | "F" | "G";
 
 export interface ViralEvent {
   headline: string;
   category: string;
-  impact_rating: number;
   confidence: ConfidenceLevel;
-  source: string;
-  summary: string;
+  rank: number;
+  country_region: string;
+  why_included: WhyIncludedTag[];
+  revenue_impact: string;
+  what_changed: string[];
+  proof_pack: string;
+  // Backward compat: old fields kept as optional
+  impact_rating?: number;
+  source?: string;
+  summary?: string;
 }
 
 export interface DeepDive {
   title: string;
-  priority: string;
-  summary: string;
-  key_findings: string[];
+  what_happened: string;
+  why_it_matters: string;
+  second_order_implications: string;
+  what_to_watch: string;
+  // Backward compat
+  priority?: string;
+  summary?: string;
+  key_findings?: string[];
 }
 
 export interface CompletenessAudit {
@@ -22,6 +35,9 @@ export interface CompletenessAudit {
   sources_checked: number;
   confidence_score: number;
   gaps: string[];
+  reuters_articles?: string[];
+  major_stock_moves?: string[];
+  vendor_coverage?: string[];
 }
 
 export interface EngineResult {

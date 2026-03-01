@@ -2,23 +2,35 @@
 
 from pydantic import BaseModel, Field
 
-from backend.types.enums import ConfidenceLevel, EventCategory
+from backend.types.enums import ConfidenceLevel, EventCategory, WhyIncludedTag
 
 
 class ViralEvent(BaseModel):
     headline: str
     category: EventCategory
-    impact_rating: int = Field(ge=1, le=10)
     confidence: ConfidenceLevel
-    source: str
-    summary: str
+    rank: int = Field(default=0)
+    country_region: str = Field(default="")
+    why_included: list[WhyIncludedTag] = Field(default_factory=list)
+    revenue_impact: str = Field(default="")
+    what_changed: list[str] = Field(default_factory=list)
+    proof_pack: str = Field(default="")
+    # Backward compat: old fields kept as optional
+    impact_rating: int | None = Field(default=None)
+    source: str | None = Field(default=None)
+    summary: str | None = Field(default=None)
 
 
 class DeepDive(BaseModel):
     title: str
-    priority: str
-    summary: str
-    key_findings: list[str]
+    what_happened: str = Field(default="")
+    why_it_matters: str = Field(default="")
+    second_order_implications: str = Field(default="")
+    what_to_watch: str = Field(default="")
+    # Backward compat: old fields kept as optional
+    priority: str | None = Field(default=None)
+    summary: str | None = Field(default=None)
+    key_findings: list[str] | None = Field(default=None)
 
 
 class CompletenessAudit(BaseModel):
@@ -26,3 +38,6 @@ class CompletenessAudit(BaseModel):
     sources_checked: int
     confidence_score: float = Field(ge=0.0, le=1.0)
     gaps: list[str]
+    reuters_articles: list[str] = Field(default_factory=list)
+    major_stock_moves: list[str] = Field(default_factory=list)
+    vendor_coverage: list[str] = Field(default_factory=list)

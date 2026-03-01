@@ -17,9 +17,24 @@ class ConfidenceLevel(str, Enum):
 
 
 class EventCategory(str, Enum):
+    MODEL = "model"
+    INFRA = "infra"
+    MARKET = "market"
+    REGULATION = "regulation"
+    MOAT_ATTACK = "moat_attack"
+    # Backward compat: old variants kept for deserialization of legacy reports
     PRODUCT_LAUNCH = "product_launch"
     FUNDING = "funding"
     PARTNERSHIP = "partnership"
-    REGULATION = "regulation"
     RESEARCH = "research"
     OPEN_SOURCE = "open_source"
+
+
+class WhyIncludedTag(str, Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+    E = "E"
+    F = "F"
+    G = "G"

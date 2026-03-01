@@ -51,7 +51,7 @@ def tavily_search(
             query,
             max_results=max_results,
             topic=topic,
-            days=1,
+            days=7,
         )
     except Exception:
         logger.exception(

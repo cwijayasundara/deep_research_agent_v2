@@ -16,7 +16,7 @@ from research_agent.tools import tavily_search, think_tool
 logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT_RESEARCH_UNITS = 3
-MAX_RESEARCHER_ITERATIONS = 3
+MAX_RESEARCHER_ITERATIONS = 5
 
 
 def build_agent(model_name: str = "google_genai:gemini-3-flash-preview"):

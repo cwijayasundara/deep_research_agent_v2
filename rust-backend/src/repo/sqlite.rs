@@ -30,6 +30,7 @@ impl SqliteRepo {
                         data TEXT NOT NULL
                     )",
                 )?;
+
                 Ok(())
             })
             .await

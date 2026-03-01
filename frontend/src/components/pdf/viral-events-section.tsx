@@ -1,7 +1,7 @@
 import { View, Text, Link, StyleSheet } from "@react-pdf/renderer";
 import { PDF_COLORS, PDF_FONTS, PDF_SPACING } from "@/lib/pdf-theme";
 import { ViralEvent } from "@/lib/types";
-import { isUrl, domainFrom } from "@/lib/report-utils";
+import { isUrl, domainFrom, parseProofPack, WHY_INCLUDED_LABELS } from "@/lib/report-utils";
 
 interface ViralEventsSectionProps {
   events: ViralEvent[];
@@ -36,28 +36,42 @@ const styles = StyleSheet.create({
     padding: PDF_SPACING.cardPadding,
     marginBottom: PDF_SPACING.itemGap,
   },
+  headlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  rankBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: PDF_COLORS.brandBlue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankText: {
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+    color: PDF_COLORS.white,
+  },
   headline: {
     fontSize: PDF_FONTS.subheading,
     fontFamily: "Helvetica-Bold",
     color: PDF_COLORS.text,
-    marginBottom: 6,
+    flex: 1,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   badge: {
     fontSize: PDF_FONTS.caption,
     color: PDF_COLORS.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-  },
-  impactText: {
-    fontSize: PDF_FONTS.caption,
-    color: PDF_COLORS.brandBlue,
-    fontFamily: "Helvetica-Bold",
   },
   confidenceHigh: {
     fontSize: PDF_FONTS.caption,
@@ -77,11 +91,53 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     textTransform: "uppercase",
   },
-  summary: {
+  tagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    marginBottom: 6,
+  },
+  tag: {
+    fontSize: 6,
+    color: PDF_COLORS.brandBlue,
+    borderWidth: 0.5,
+    borderColor: PDF_COLORS.brandBlue,
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  sectionLabel: {
+    fontSize: PDF_FONTS.caption,
+    fontFamily: "Helvetica-Bold",
+    color: PDF_COLORS.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  bodyText: {
     fontSize: PDF_FONTS.body,
     color: PDF_COLORS.textSecondary,
     lineHeight: 1.5,
-    marginBottom: 6,
+    marginBottom: 4,
+  },
+  bulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 2,
+    paddingLeft: 4,
+  },
+  bulletDot: {
+    fontSize: PDF_FONTS.body,
+    color: PDF_COLORS.brandBlue,
+    marginRight: 6,
+    marginTop: 1,
+  },
+  bulletText: {
+    fontSize: PDF_FONTS.body,
+    color: PDF_COLORS.textSecondary,
+    lineHeight: 1.4,
+    flex: 1,
   },
   sourceLink: {
     fontSize: PDF_FONTS.caption,
@@ -91,6 +147,11 @@ const styles = StyleSheet.create({
   sourcePlain: {
     fontSize: PDF_FONTS.caption,
     color: PDF_COLORS.textMuted,
+  },
+  arrow: {
+    fontSize: PDF_FONTS.caption,
+    color: PDF_COLORS.textMuted,
+    marginHorizontal: 4,
   },
 });
 
@@ -109,28 +170,82 @@ export default function ViralEventsSection({ events }: ViralEventsSectionProps) 
         <View style={styles.headerBar} />
         <Text style={styles.headerText}>Viral Events</Text>
       </View>
-      {events.map((event, i) => (
-        <View key={i} style={styles.card} wrap={false}>
-          <Text style={styles.headline}>{event.headline}</Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.badge}>{event.category.replace(/_/g, " ")}</Text>
-            <Text style={styles.impactText}>Impact: {event.impact_rating}/10</Text>
-            <Text style={confidenceStyles[event.confidence] ?? styles.confidenceMedium}>
-              {event.confidence}
-            </Text>
+      {events.map((event, i) => {
+        const proofLinks = parseProofPack(event.proof_pack);
+        return (
+          <View key={i} style={styles.card} wrap={false}>
+            <View style={styles.headlineRow}>
+              {event.rank > 0 && (
+                <View style={styles.rankBadge}>
+                  <Text style={styles.rankText}>{event.rank}</Text>
+                </View>
+              )}
+              <Text style={styles.headline}>{event.headline}</Text>
+            </View>
+            <View style={styles.metaRow}>
+              <Text style={styles.badge}>{event.category.replace(/_/g, " ")}</Text>
+              <Text style={confidenceStyles[event.confidence] ?? styles.confidenceMedium}>
+                {event.confidence}
+              </Text>
+              {event.country_region ? (
+                <Text style={styles.badge}>{event.country_region}</Text>
+              ) : null}
+            </View>
+            {/* Why Included tags */}
+            {event.why_included.length > 0 && (
+              <View style={styles.tagRow}>
+                {event.why_included.map((tag, j) => (
+                  <Text key={j} style={styles.tag}>
+                    {tag}: {WHY_INCLUDED_LABELS[tag]}
+                  </Text>
+                ))}
+              </View>
+            )}
+            {/* Revenue Impact */}
+            {event.revenue_impact ? (
+              <View>
+                <Text style={styles.sectionLabel}>Revenue Impact</Text>
+                <Text style={styles.bodyText}>{event.revenue_impact}</Text>
+              </View>
+            ) : null}
+            {/* What Changed */}
+            {event.what_changed.length > 0 && (
+              <View>
+                <Text style={styles.sectionLabel}>What Changed</Text>
+                {event.what_changed.map((item, j) => (
+                  <View key={j} style={styles.bulletRow}>
+                    <Text style={styles.bulletDot}>&#8226;</Text>
+                    <Text style={styles.bulletText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {/* Backward compat: old summary */}
+            {event.summary ? (
+              <Text style={styles.bodyText}>{event.summary}</Text>
+            ) : null}
+            {/* Proof Pack */}
+            {proofLinks.length > 0 ? (
+              <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}>
+                {proofLinks.map((link, j) => (
+                  <View key={j} style={{ flexDirection: "row", alignItems: "center" }}>
+                    {j > 0 && <Text style={styles.arrow}>&rarr;</Text>}
+                    <Link src={link.url} style={styles.sourceLink}>
+                      {domainFrom(link.url)}
+                    </Link>
+                  </View>
+                ))}
+              </View>
+            ) : event.source && isUrl(event.source) ? (
+              <Link src={event.source} style={styles.sourceLink}>
+                {domainFrom(event.source)} — {event.source}
+              </Link>
+            ) : event.source ? (
+              <Text style={styles.sourcePlain}>Source: {event.source}</Text>
+            ) : null}
           </View>
-          {event.summary ? (
-            <Text style={styles.summary}>{event.summary}</Text>
-          ) : null}
-          {isUrl(event.source) ? (
-            <Link src={event.source} style={styles.sourceLink}>
-              {domainFrom(event.source)} — {event.source}
-            </Link>
-          ) : (
-            <Text style={styles.sourcePlain}>Source: {event.source}</Text>
-          )}
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }

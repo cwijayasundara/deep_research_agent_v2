@@ -39,27 +39,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  priorityBadge: {
-    fontSize: PDF_FONTS.caption,
+  numberBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: PDF_COLORS.brandBlue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  numberText: {
+    fontSize: 8,
     fontFamily: "Helvetica-Bold",
-    textTransform: "uppercase",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 3,
-  },
-  priorityHigh: {
     color: PDF_COLORS.white,
-    backgroundColor: PDF_COLORS.priorityHigh,
-  },
-  priorityMedium: {
-    color: PDF_COLORS.white,
-    backgroundColor: PDF_COLORS.priorityMedium,
-  },
-  priorityLow: {
-    color: PDF_COLORS.white,
-    backgroundColor: PDF_COLORS.priorityLow,
   },
   title: {
     fontSize: PDF_FONTS.subheading,
@@ -67,12 +60,22 @@ const styles = StyleSheet.create({
     color: PDF_COLORS.text,
     flex: 1,
   },
-  summary: {
+  sectionLabel: {
+    fontSize: PDF_FONTS.caption,
+    fontFamily: "Helvetica-Bold",
+    color: PDF_COLORS.brandBlue,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 6,
+    marginBottom: 3,
+  },
+  sectionText: {
     fontSize: PDF_FONTS.body,
     color: PDF_COLORS.textSecondary,
     lineHeight: 1.5,
-    marginBottom: 8,
+    marginBottom: 4,
   },
+  // Backward compat styles
   findingsLabel: {
     fontSize: PDF_FONTS.caption,
     fontFamily: "Helvetica-Bold",
@@ -101,11 +104,14 @@ const styles = StyleSheet.create({
   },
 });
 
-function getPriorityStyle(priority: string) {
-  const p = priority.toLowerCase();
-  if (p === "high") return styles.priorityHigh;
-  if (p === "medium") return styles.priorityMedium;
-  return styles.priorityLow;
+function DiveSection({ label, content }: { label: string; content: string }) {
+  if (!content) return null;
+  return (
+    <View>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      <Text style={styles.sectionText}>{content}</Text>
+    </View>
+  );
 }
 
 export default function DeepDivesSection({ dives }: DeepDivesSectionProps) {
@@ -120,18 +126,28 @@ export default function DeepDivesSection({ dives }: DeepDivesSectionProps) {
       {dives.map((dive, i) => (
         <View key={i} style={styles.card} wrap={false}>
           <View style={styles.titleRow}>
-            <Text style={[styles.priorityBadge, getPriorityStyle(dive.priority)]}>
-              {dive.priority}
-            </Text>
+            <View style={styles.numberBadge}>
+              <Text style={styles.numberText}>{i + 1}</Text>
+            </View>
             <Text style={styles.title}>{dive.title}</Text>
           </View>
-          <Text style={styles.summary}>{dive.summary}</Text>
-          {dive.key_findings.length > 0 && (
+
+          {/* v4.0 four-section format */}
+          <DiveSection label="What Happened" content={dive.what_happened} />
+          <DiveSection label="Why It Matters" content={dive.why_it_matters} />
+          <DiveSection label="Second-Order Implications" content={dive.second_order_implications} />
+          <DiveSection label="What to Watch" content={dive.what_to_watch} />
+
+          {/* Backward compat: old summary + findings */}
+          {dive.summary && !dive.what_happened && (
+            <Text style={styles.sectionText}>{dive.summary}</Text>
+          )}
+          {dive.key_findings && dive.key_findings.length > 0 && !dive.what_happened && (
             <View>
               <Text style={styles.findingsLabel}>Key Findings</Text>
               {dive.key_findings.map((finding, j) => (
                 <View key={j} style={styles.findingRow}>
-                  <Text style={styles.findingBullet}>•</Text>
+                  <Text style={styles.findingBullet}>&#8226;</Text>
                   <Text style={styles.findingText}>{finding}</Text>
                 </View>
               ))}

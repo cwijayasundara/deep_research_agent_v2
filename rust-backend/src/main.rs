@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::http::{header, Method};
@@ -5,6 +6,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use rig::providers::openai;
 use tavily::Tavily;
+use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -26,6 +28,8 @@ pub struct AppState {
     pub openai_client: openai::Client,
     pub tavily_client: Arc<Tavily>,
     pub repo: SqliteRepo,
+    /// Report IDs currently being researched (in-memory only, not persisted).
+    pub running_reports: RwLock<HashSet<String>>,
 }
 
 #[tokio::main]
@@ -64,6 +68,7 @@ async fn main() {
         openai_client,
         tavily_client,
         repo,
+        running_reports: RwLock::new(HashSet::new()),
     });
 
     let cors = CorsLayer::new()

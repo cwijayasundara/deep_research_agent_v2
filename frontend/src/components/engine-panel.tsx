@@ -1,7 +1,15 @@
 "use client";
 
-import { EngineResult, ViralEvent, DeepDive, ConfidenceLevel } from "@/lib/types";
-import { isUrl, extractUrls, domainFrom, parseTldrBullets } from "@/lib/report-utils";
+import { EngineResult, ViralEvent, DeepDive, ConfidenceLevel, WhyIncludedTag } from "@/lib/types";
+import {
+  isUrl,
+  extractUrls,
+  domainFrom,
+  parseTldrBullets,
+  parseProofPack,
+  WHY_INCLUDED_LABELS,
+  WHY_INCLUDED_COLORS,
+} from "@/lib/report-utils";
 
 interface EnginePanelProps {
   result: EngineResult | null;
@@ -211,28 +219,40 @@ function ViralEventsSection({ events, color }: { events: ViralEvent[]; color: st
 }
 
 function EventCard({ event, color, defaultOpen }: { event: ViralEvent; color: string; defaultOpen?: boolean }) {
-  const sourceIsLink = isUrl(event.source);
+  const proofLinks = parseProofPack(event.proof_pack);
+  // Backward compat: fall back to old source field
+  const fallbackSource = event.source;
 
   return (
     <details
       open={defaultOpen}
       className="group rounded-lg border border-white/5 bg-white/[0.02] overflow-hidden"
     >
-      {/* Collapsed summary: headline + metrics */}
+      {/* Collapsed summary: rank badge + headline + metrics */}
       <summary className="px-4 py-3 cursor-pointer hover:bg-white/[0.03] transition-colors">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 mb-1.5">
+              {event.rank > 0 && (
+                <span
+                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                  style={{ backgroundColor: color }}
+                >
+                  {event.rank}
+                </span>
+              )}
               <h5 className="text-sm text-gray-200 font-medium leading-snug">
                 {event.headline}
               </h5>
             </div>
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <CategoryBadge category={event.category} />
-              <div className="flex items-center gap-1.5">
-                <ImpactBar rating={event.impact_rating} color={color} />
-              </div>
               <ConfidenceBadge level={event.confidence} />
+              {event.country_region && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">
+                  {event.country_region}
+                </span>
+              )}
             </div>
           </div>
           <svg
@@ -246,35 +266,93 @@ function EventCard({ event, color, defaultOpen }: { event: ViralEvent; color: st
         </div>
       </summary>
 
-      {/* Expanded detail: summary + source link */}
+      {/* Expanded detail */}
       <div className="px-4 pb-4 border-t border-white/5 pt-3 space-y-3">
-        {/* Summary */}
+        {/* Why Included tags */}
+        {event.why_included.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {event.why_included.map((tag) => (
+              <span
+                key={tag}
+                className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${WHY_INCLUDED_COLORS[tag]}`}
+              >
+                {tag}: {WHY_INCLUDED_LABELS[tag]}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Revenue Impact */}
+        {event.revenue_impact && (
+          <div>
+            <h6 className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">
+              Revenue Impact
+            </h6>
+            <p className="text-sm text-gray-400 leading-relaxed">{event.revenue_impact}</p>
+          </div>
+        )}
+
+        {/* What Changed bullets */}
+        {event.what_changed.length > 0 && (
+          <div>
+            <h6 className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1.5">
+              What Changed
+            </h6>
+            <ul className="space-y-1">
+              {event.what_changed.map((item, j) => (
+                <li key={j} className="flex items-start gap-2 text-sm text-gray-400 leading-relaxed">
+                  <span style={{ color }} className="mt-1 flex-shrink-0">&#8226;</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Backward compat: old summary field */}
         {event.summary && (
           <p className="text-sm text-gray-400 leading-relaxed">{event.summary}</p>
         )}
 
-        {/* Source link */}
-        <div className="flex items-center gap-2">
-          <svg className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-          {sourceIsLink ? (
+        {/* Proof Pack links */}
+        {proofLinks.length > 0 ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <svg className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            {proofLinks.map((link, j) => (
+              <span key={j} className="flex items-center gap-1">
+                {j > 0 && <span className="text-gray-600 text-[10px]">&rarr;</span>}
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[12px] font-medium hover:underline"
+                  style={{ color }}
+                >
+                  {domainFrom(link.url)}
+                </a>
+              </span>
+            ))}
+          </div>
+        ) : fallbackSource && isUrl(fallbackSource) ? (
+          <div className="flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
             <a
-              href={event.source}
+              href={fallbackSource}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[12px] font-medium hover:underline"
               style={{ color }}
             >
-              {domainFrom(event.source)}
-              <span className="text-gray-600 font-normal ml-1.5 text-[11px]">
-                {event.source.replace(/^https?:\/\//, "").slice(0, 60)}
-              </span>
+              {domainFrom(fallbackSource)}
             </a>
-          ) : (
-            <span className="text-[12px] text-gray-500">{event.source}</span>
-          )}
-        </div>
+          </div>
+        ) : fallbackSource ? (
+          <span className="text-[12px] text-gray-500">{fallbackSource}</span>
+        ) : null}
       </div>
     </details>
   );
@@ -286,21 +364,6 @@ function CategoryBadge({ category }: { category: string }) {
     <span className="flex-shrink-0 px-2 py-0.5 rounded text-[10px] bg-white/5 text-gray-400 uppercase tracking-wider">
       {label}
     </span>
-  );
-}
-
-function ImpactBar({ rating, color }: { rating: number; color: string }) {
-  const width = Math.min(100, Math.max(0, rating * 10));
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${width}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-[11px] text-gray-400 font-mono w-6 text-right">{rating}/10</span>
-    </div>
   );
 }
 
@@ -334,7 +397,12 @@ function StrategicDeepDives({ dives, color }: { dives: DeepDive[]; color: string
           >
             <summary className="px-4 py-3 cursor-pointer hover:bg-white/[0.02] transition-colors flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <PriorityBadge priority={dive.priority} />
+                <span
+                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                  style={{ backgroundColor: color }}
+                >
+                  {i + 1}
+                </span>
                 <span className="text-sm text-gray-200 font-medium">{dive.title}</span>
               </div>
               <svg
@@ -346,12 +414,18 @@ function StrategicDeepDives({ dives, color }: { dives: DeepDive[]; color: string
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </summary>
-            <div className="px-4 pb-4 border-t border-white/5 pt-3 space-y-3">
-              {/* Summary */}
-              <p className="text-sm text-gray-400 leading-relaxed">{dive.summary}</p>
+            <div className="px-4 pb-4 border-t border-white/5 pt-3 space-y-4">
+              {/* v4.0 four-section format */}
+              <DeepDiveSection label="What Happened" content={dive.what_happened} color={color} />
+              <DeepDiveSection label="Why It Matters" content={dive.why_it_matters} color={color} />
+              <DeepDiveSection label="Second-Order Implications" content={dive.second_order_implications} color={color} />
+              <DeepDiveSection label="What to Watch" content={dive.what_to_watch} color={color} />
 
-              {/* Key Findings */}
-              {dive.key_findings.length > 0 && (
+              {/* Backward compat: old summary + findings */}
+              {dive.summary && !dive.what_happened && (
+                <p className="text-sm text-gray-400 leading-relaxed">{dive.summary}</p>
+              )}
+              {dive.key_findings && dive.key_findings.length > 0 && !dive.what_happened && (
                 <div>
                   <h6 className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
                     Key Findings
@@ -374,18 +448,18 @@ function StrategicDeepDives({ dives, color }: { dives: DeepDive[]; color: string
   );
 }
 
-function PriorityBadge({ priority }: { priority: string }) {
-  const normalized = priority.toLowerCase();
-  const styles =
-    normalized === "high"
-      ? "text-red-400 bg-red-400/10 border-red-400/20"
-      : normalized === "medium"
-        ? "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"
-        : "text-gray-400 bg-gray-400/10 border-gray-400/20";
+function DeepDiveSection({ label, content, color }: { label: string; content: string; color: string }) {
+  if (!content) return null;
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase ${styles}`}>
-      {priority}
-    </span>
+    <div>
+      <h6
+        className="text-[10px] font-bold uppercase tracking-widest mb-1.5"
+        style={{ color }}
+      >
+        {label}
+      </h6>
+      <p className="text-sm text-gray-400 leading-relaxed">{content}</p>
+    </div>
   );
 }
 
@@ -431,6 +505,27 @@ function CompletenessFooter({
           </div>
         </div>
       )}
+      {/* New v4.0 audit detail sections */}
+      <AuditDetailList label="Reuters Articles Reviewed" items={audit.reuters_articles} color={color} />
+      <AuditDetailList label="Major Stock Moves" items={audit.major_stock_moves} color={color} />
+      <AuditDetailList label="Vendor Coverage by Region" items={audit.vendor_coverage} color={color} />
+    </div>
+  );
+}
+
+function AuditDetailList({ label, items, color }: { label: string; items?: string[]; color: string }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-3 pt-3 border-t" style={{ borderColor: `${color}10` }}>
+      <p className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-wider font-medium">{label}</p>
+      <ul className="space-y-1">
+        {items.map((item, i) => (
+          <li key={i} className="text-[11px] text-gray-400 flex items-start gap-1.5">
+            <span className="text-gray-600 mt-0.5">&#8226;</span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -457,12 +552,15 @@ function SourcesSection({
   rawMarkdown: string;
   color: string;
 }) {
-  // Collect all unique URLs from event sources and raw markdown
-  const eventUrls = events
-    .map((e) => e.source.trim())
+  // Collect URLs from proof_pack fields, old source fields, and raw markdown
+  const proofPackUrls = events.flatMap((e) =>
+    parseProofPack(e.proof_pack).map((l) => l.url)
+  );
+  const sourceUrls = events
+    .map((e) => (e.source ?? "").trim())
     .filter(isUrl);
   const markdownUrls = extractUrls(rawMarkdown);
-  const allUrls = [...new Set([...eventUrls, ...markdownUrls])];
+  const allUrls = [...new Set([...proofPackUrls, ...sourceUrls, ...markdownUrls])];
 
   if (allUrls.length === 0) return null;
 

@@ -12,68 +12,9 @@ use crate::types::report::{EngineResult, ResearchReport};
 use crate::types::requests::{ReportListResponse, ResearchRequest};
 use crate::AppState;
 
-pub async fn list_reports(
-    State(state): State<Arc<AppState>>,
-    _user: AuthUser,
-) -> Result<Json<ReportListResponse>, AppError> {
-    let reports = state.repo.list_reports(20).await?;
-    let total = reports.len();
-    Ok(Json(ReportListResponse { reports, total }))
-}
-
-pub async fn get_report(
-    State(state): State<Arc<AppState>>,
-    _user: AuthUser,
-    Path(report_id): Path<String>,
-) -> Result<Json<ResearchReport>, AppError> {
-    let report = state
-        .repo
-        .get_report(&report_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound("Report not found".into()))?;
-    Ok(Json(report))
-}
-
-pub async fn trigger_research(
-    State(state): State<Arc<AppState>>,
-    _user: AuthUser,
-    Json(request): Json<ResearchRequest>,
-) -> Result<Json<ResearchReport>, AppError> {
-    let date = request
-        .date
-        .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
-
-    tracing::info!(date = %date, "Research trigger requested");
-
-    let report_id = format!("rpt-{date}");
-
-    if let Some(existing) = state.repo.get_report(&report_id).await? {
-        if let Some(ref result) = existing.result {
-            match result.status {
-                ResearchStatus::Completed | ResearchStatus::Running => {
-                    tracing::info!(
-                        report_id = %report_id,
-                        status = ?result.status,
-                        "Reusing existing report (skipping new research)"
-                    );
-                    return Ok(Json(existing));
-                }
-                _ => {
-                    tracing::info!(
-                        report_id = %report_id,
-                        status = ?result.status,
-                        error_message = result.error_message.as_deref().unwrap_or("none"),
-                        "Found existing report with non-terminal status, allowing re-trigger"
-                    );
-                }
-            }
-        }
-    } else {
-        tracing::info!(report_id = %report_id, "No existing report found, starting fresh");
-    }
-
+fn make_running_report(report_id: String) -> ResearchReport {
     let now = Utc::now();
-    let running_report = ResearchReport {
+    ResearchReport {
         report_id,
         run_date: now,
         result: Some(EngineResult {
@@ -89,12 +30,94 @@ pub async fn trigger_research(
             error_message: None,
         }),
         created_at: now,
-    };
+    }
+}
 
-    state.repo.save_report(&running_report).await?;
+pub async fn list_reports(
+    State(state): State<Arc<AppState>>,
+    _user: AuthUser,
+) -> Result<Json<ReportListResponse>, AppError> {
+    let mut reports = state.repo.list_reports(20).await?;
+
+    // Merge in-memory running reports that aren't yet persisted to DB
+    let running_ids = state.running_reports.read().await;
+    for id in running_ids.iter() {
+        if !reports.iter().any(|r| r.report_id == *id) {
+            reports.push(make_running_report(id.clone()));
+        }
+    }
+
+    // Sort by run_date descending so running reports appear at the top
+    reports.sort_by(|a, b| b.run_date.cmp(&a.run_date));
+
+    let total = reports.len();
+    Ok(Json(ReportListResponse { reports, total }))
+}
+
+pub async fn get_report(
+    State(state): State<Arc<AppState>>,
+    _user: AuthUser,
+    Path(report_id): Path<String>,
+) -> Result<Json<ResearchReport>, AppError> {
+    if let Some(report) = state.repo.get_report(&report_id).await? {
+        return Ok(Json(report));
+    }
+
+    if state.running_reports.read().await.contains(&report_id) {
+        return Ok(Json(make_running_report(report_id)));
+    }
+
+    Err(AppError::NotFound("Report not found".into()))
+}
+
+pub async fn trigger_research(
+    State(state): State<Arc<AppState>>,
+    _user: AuthUser,
+    Json(request): Json<ResearchRequest>,
+) -> Result<Json<ResearchReport>, AppError> {
+    let date = request
+        .date
+        .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
+
+    tracing::info!(date = %date, "Research trigger requested");
+
+    let report_id = format!("rpt-{date}");
+
+    // Check if research is already running in-memory
+    if state.running_reports.read().await.contains(&report_id) {
+        tracing::info!(report_id = %report_id, "Research already running");
+        return Ok(Json(make_running_report(report_id)));
+    }
+
+    // Check if a completed report already exists in DB
+    if let Some(existing) = state.repo.get_report(&report_id).await? {
+        if let Some(ref result) = existing.result {
+            if result.status == ResearchStatus::Completed {
+                tracing::info!(
+                    report_id = %report_id,
+                    "Reusing existing completed report (skipping new research)"
+                );
+                return Ok(Json(existing));
+            }
+            tracing::info!(
+                report_id = %report_id,
+                status = ?result.status,
+                error_message = result.error_message.as_deref().unwrap_or("none"),
+                "Found existing non-completed report, allowing re-trigger"
+            );
+        }
+    } else {
+        tracing::info!(report_id = %report_id, "No existing report found, starting fresh");
+    }
+
+    // Mark as running in memory (NOT persisted to DB)
+    state.running_reports.write().await.insert(report_id.clone());
+
+    let running_report = make_running_report(report_id);
+
     tracing::info!(
         report_id = %running_report.report_id,
-        "Saved Running report, spawning background research task"
+        "Spawning background research task"
     );
 
     // Spawn background task
@@ -124,6 +147,8 @@ pub async fn trigger_research(
                 );
             }
         }
+        // Remove from in-memory running set regardless of outcome
+        state_clone.running_reports.write().await.remove(&bg_report_id);
     });
 
     Ok(Json(running_report))

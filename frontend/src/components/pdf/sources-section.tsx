@@ -1,7 +1,7 @@
 import { View, Text, Link, StyleSheet } from "@react-pdf/renderer";
 import { PDF_COLORS, PDF_FONTS, PDF_SPACING } from "@/lib/pdf-theme";
 import { ViralEvent } from "@/lib/types";
-import { isUrl, extractUrls, domainFrom } from "@/lib/report-utils";
+import { isUrl, extractUrls, domainFrom, parseProofPack } from "@/lib/report-utils";
 
 interface SourcesSectionProps {
   events: ViralEvent[];
@@ -58,9 +58,15 @@ const styles = StyleSheet.create({
 });
 
 export default function SourcesSection({ events, rawMarkdown }: SourcesSectionProps) {
-  const eventUrls = events.map((e) => e.source.trim()).filter(isUrl);
+  // Collect URLs from proof_pack, old source field, and raw markdown
+  const proofPackUrls = events.flatMap((e) =>
+    parseProofPack(e.proof_pack).map((l) => l.url)
+  );
+  const sourceUrls = events
+    .map((e) => (e.source ?? "").trim())
+    .filter(isUrl);
   const markdownUrls = extractUrls(rawMarkdown);
-  const allUrls = [...new Set([...eventUrls, ...markdownUrls])];
+  const allUrls = [...new Set([...proofPackUrls, ...sourceUrls, ...markdownUrls])];
 
   if (allUrls.length === 0) return null;
 

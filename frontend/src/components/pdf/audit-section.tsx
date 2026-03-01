@@ -75,7 +75,47 @@ const styles = StyleSheet.create({
     color: PDF_COLORS.textSecondary,
     flex: 1,
   },
+  detailLabel: {
+    fontSize: PDF_FONTS.caption,
+    fontFamily: "Helvetica-Bold",
+    color: PDF_COLORS.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 3,
+    paddingLeft: 4,
+  },
+  detailBullet: {
+    fontSize: PDF_FONTS.body,
+    color: PDF_COLORS.brandBlue,
+    marginRight: 6,
+  },
+  detailText: {
+    fontSize: PDF_FONTS.body,
+    color: PDF_COLORS.textSecondary,
+    flex: 1,
+  },
 });
+
+function DetailList({ label, items }: { label: string; items?: string[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <View>
+      <Text style={styles.detailLabel}>{label}</Text>
+      {items.map((item, i) => (
+        <View key={i} style={styles.detailRow}>
+          <Text style={styles.detailBullet}>&#8226;</Text>
+          <Text style={styles.detailText}>{item}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function AuditSection({ audit }: AuditSectionProps) {
   if (!audit) return null;
@@ -106,12 +146,15 @@ export default function AuditSection({ audit }: AuditSectionProps) {
           <Text style={styles.gapsLabel}>Coverage Gaps</Text>
           {audit.gaps.map((gap, i) => (
             <View key={i} style={styles.gapRow}>
-              <Text style={styles.gapBullet}>—</Text>
+              <Text style={styles.gapBullet}>&mdash;</Text>
               <Text style={styles.gapText}>{gap}</Text>
             </View>
           ))}
         </View>
       )}
+      <DetailList label="Reuters Articles Reviewed" items={audit.reuters_articles} />
+      <DetailList label="Major Stock Moves" items={audit.major_stock_moves} />
+      <DetailList label="Vendor Coverage by Region" items={audit.vendor_coverage} />
     </View>
   );
 }
