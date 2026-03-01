@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background-dark: #101622;
+  --color-background-light: #f5f6f8;
+  --color-primary: #0d59f2;
+  --color-cyan-accent: #00f2ff;
+  --color-magenta-accent: #ff00e5;
+  --color-surface: #131b2e;
+  --color-surface-hover: #1a2235;
+  --color-border: #2a3a55;
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background-color: #101622;
+  color: #e5e7eb;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #101622;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3a55;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4a65;
+}
+
+/* Glow animation for active elements */
+@keyframes glow-cyan {
+  0%, 100% { box-shadow: 0 0 15px rgba(0, 242, 255, 0.1); }
+  50% { box-shadow: 0 0 25px rgba(0, 242, 255, 0.2); }
+}
+
+@keyframes glow-magenta {
+  0%, 100% { box-shadow: 0 0 15px rgba(255, 0, 229, 0.1); }
+  50% { box-shadow: 0 0 25px rgba(255, 0, 229, 0.2); }
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# Rust
+rust-backend/target/
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+.next/
+
+# Data
+data/
+*.db
+
+# OS
+.DS_Store
