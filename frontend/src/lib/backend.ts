@@ -1,4 +1,4 @@
-export type Backend = "rust" | "python";
+export type Backend = "rust" | "python" | "deepagent";
 
 const STORAGE_KEY = "deep_research_backend";
 
@@ -6,11 +6,13 @@ const RUST_API_BASE =
   process.env.NEXT_PUBLIC_RUST_API_BASE || "http://localhost:8000";
 const PYTHON_API_BASE =
   process.env.NEXT_PUBLIC_PYTHON_API_BASE || "http://localhost:8001";
+const DEEPAGENT_API_BASE =
+  process.env.NEXT_PUBLIC_DEEPAGENT_API_BASE || "http://localhost:8002";
 
 export function getSelectedBackend(): Backend {
   if (typeof window === "undefined") return "rust";
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "rust" || stored === "python") return stored;
+  if (stored === "rust" || stored === "python" || stored === "deepagent") return stored;
   return "rust";
 }
 
@@ -22,5 +24,12 @@ export function setSelectedBackend(backend: Backend): void {
 
 export function getApiBase(backend?: Backend): string {
   const b = backend ?? getSelectedBackend();
-  return b === "rust" ? RUST_API_BASE : PYTHON_API_BASE;
+  switch (b) {
+    case "rust":
+      return RUST_API_BASE;
+    case "python":
+      return PYTHON_API_BASE;
+    case "deepagent":
+      return DEEPAGENT_API_BASE;
+  }
 }

@@ -19,14 +19,23 @@ async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${getApiBase()}${path}`;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
+  const base = getApiBase();
+  const url = `${base}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(
+      `Cannot reach backend at ${base} — is the server running?`,
+      0
+    );
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");

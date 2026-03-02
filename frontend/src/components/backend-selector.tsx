@@ -42,6 +42,16 @@ export default function BackendSelector({ onSwitch }: BackendSelectorProps) {
       >
         Python
       </button>
+      <button
+        onClick={() => handleSelect("deepagent")}
+        className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+          backend === "deepagent"
+            ? "bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/40"
+            : "text-gray-400 hover:text-gray-200 border border-transparent"
+        }`}
+      >
+        Deep Agent
+      </button>
     </div>
   );
 }
