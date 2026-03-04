@@ -4,6 +4,7 @@ import {
   ResearchReport,
 } from "./types";
 import { getApiBase } from "./backend";
+import { clearToken } from "./auth";
 
 class ApiError extends Error {
   status: number;
@@ -38,6 +39,12 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearToken();
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+    }
     const errorText = await response.text().catch(() => "Unknown error");
     throw new ApiError(errorText, response.status);
   }

@@ -45,7 +45,9 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(24),
-            openai_model: env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o".into()),
+            openai_model: env::var("RUST_OPENAI_MODEL")
+                .or_else(|_| env::var("OPENAI_MODEL"))
+                .unwrap_or_else(|_| "gpt-4o".into()),
             cors_origins: parse_cors_origins(
                 &env::var("CORS_ORIGINS").unwrap_or_else(|_| "http://localhost:3000".into()),
             ),
